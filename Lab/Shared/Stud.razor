@@ -1,0 +1,137 @@
+﻿@page "/stud"
+@using Data
+@using Microsoft.EntityFrameworkCore
+
+@inject IDbContextFactory<StipContext> DbFactory
+<h3>Stud</h3>
+
+<table border="1">
+	<tr><th>ID Студента</th><th>ФИО</th><th>Средний балл</th></tr>
+	@if (student != null)
+	{
+		@foreach (var special in student)
+		{
+			<tr>
+				<td>@special.Id</td>
+				<td>@special.Name</td>
+				<td><input @bind="special.Sredbal"></input></td>
+				<td><button disabled="@Loading" @onclick="async ()=>await AddStipendia(special.Id, special.Sredbal)">Обновить</button></td>
+			</tr>
+		}
+	}
+</table>
+
+Список стипендиантов
+<table border="1">
+	<tr><th>Номер</th><th>ФИО</th><th>Средний балл</th><th>Стипендия</th></tr>
+	@if (stipendia != null)
+	{
+		int count = 0;
+		@foreach (var stip in stipendia)
+		{
+			if (stip.Stipend > 0)
+			{
+				count++;
+				<tr>
+					<td>@count</td>
+					<td>@student.FirstOrDefault(s=>s.Id == stip.StudentId).Name</td>
+					<td>@stip.Sredbal</td>
+					<td>@stip.Stipend</td>
+				</tr>
+			}
+		}
+	}
+</table>
+
+@code {
+	private bool Loading;
+	private StipContext? Context { get; set; }
+	List<Student> student = new();
+	List<Stipendia> stipendia = new();
+
+	async Task AddStipendia(int Id, double SredBal)
+	{
+		using var Context = DbFactory.CreateDbContext();
+		if (Context is not null && Context.stipendias is not null)
+		{
+			Stipendia stip = new Stipendia { StudentId = Id, Sredbal = SredBal };
+
+			if (stip.Stipend>0)
+			{
+				if (Context.stipendias.FirstOrDefault(c => c.StudentId == Id) == null)
+				{
+					await Context.stipendias.AddAsync(stip);
+				}
+				else
+				{
+					Context.stipendias.FirstOrDefault(c => c.StudentId == Id).Sredbal = SredBal;
+				}
+			}
+
+			if (stip.Stipend<=0)
+			{
+				Stipendia? item = stipendia.FirstOrDefault(d => d.StudentId == Id);
+				if (item !=null)
+					Context.stipendias.Remove(item);
+			}
+			await Context.SaveChangesAsync();
+		}
+		await UpdateStudent(Id, SredBal);
+		await ReloadStipendiaAsync();
+	}
+
+	async Task UpdateStudent(int Id, double SredBal)
+	{
+		using var Context = DbFactory.CreateDbContext();
+		if (Context is not null)
+		{
+			Context.students.FirstOrDefault(c => c.Id == Id).Sredbal = SredBal;
+			await Context.SaveChangesAsync();
+		}
+	}
+
+	async Task ReloadStipendiaAsync()
+	{
+		Loading = true;
+		try
+		{
+			using var Context = DbFactory.CreateDbContext();
+			if (Context is not null && Context.stipendias is not null)
+			{
+				var Stipendia = await Context.stipendias.ToListAsync();
+
+				if (Stipendia is not null)
+				{
+					stipendia = Stipendia;
+				}
+			}
+		}
+		finally
+		{
+			Loading = false;
+		}
+	}
+
+	protected override async Task OnInitializedAsync()
+	{
+		Loading = true;
+		try
+		{
+			using var Context = DbFactory.CreateDbContext();
+			if (Context is not null && Context.students is not null)
+			{
+				var Students = await Context.students.ToListAsync();
+				if (Students is not null)
+				{
+					student = Students;
+				}
+			}
+		}
+		finally
+		{
+			Loading = false;
+		}
+		await ReloadStipendiaAsync();
+		await base.OnInitializedAsync();
+	}
+}
